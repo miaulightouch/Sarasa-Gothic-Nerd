@@ -63,7 +63,7 @@ jobs:
           patch_one() {
             name="$(basename "$1" .ttf)"
             "$PWD/ff/squashfs-root/AppRun" -script "$PWD/patcher/font-patcher" \
-              --complete --single-width-glyphs --quiet --no-progressbars \
+              --complete --single-width-glyphs --name filename --quiet --no-progressbars \
               -out "$PWD/out" "$PWD/$1" > "logs/$name.log" 2>&1 \
               || { echo "::error::$name failed"; tail -n 20 "logs/$name.log"; return 1; }
           }

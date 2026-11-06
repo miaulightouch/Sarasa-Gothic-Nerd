@@ -10,6 +10,7 @@ LATIN, CJK = 0x41, 0x4E2D
 ICONS = {"powerline": 0xE0B0, "font-awesome": 0xF07B, "devicons": 0xE725, "material": 0xF0001}
 MIN_MATERIAL_ICONS = 6000
 EXPECTED_WEIGHTS = 10
+EXPECTED_FAMILY = "SarasaFixedTC Nerd Font Mono"
 
 
 def is_pua(cp):
@@ -47,6 +48,11 @@ def check(src_path, out_path):
         errors.append(f"{glyphs} glyphs exceeds the limit")
 
     family = out["name"].getDebugName(1)
+    typographic_family = out["name"].getDebugName(16) or family
+    if typographic_family != EXPECTED_FAMILY:
+        errors.append(f"family is {typographic_family!r}, expected {EXPECTED_FAMILY!r}")
+    if out["OS/2"].usWeightClass != src["OS/2"].usWeightClass:
+        errors.append(f"weight changed from {src['OS/2'].usWeightClass} to {out['OS/2'].usWeightClass}")
     print(f"{out_path.name}: family={family!r} style={out['name'].getDebugName(2)!r} "
           f"glyphs={glyphs} material={material} errors={len(errors)}")
     for error in errors:
