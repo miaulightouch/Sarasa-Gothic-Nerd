@@ -1,0 +1,103 @@
+name: Build Nerd Fonts
+
+on:
+  workflow_dispatch:
+    inputs:
+      sarasa_tag:
+        description: Sarasa Gothic tag, such as v1.0.43 (empty for latest)
+        required: false
+      nerd_tag:
+        description: Nerd Fonts tag, such as v3.5.1 (empty for latest)
+        required: false
+
+permissions:
+  contents: write
+
+env:
+  FONTFORGE_TAG: "20251009"
+  FONTFORGE_APPIMAGE: FontForge-2025-10-09-Linux-x86_64.AppImage
+  FAMILY: SarasaFixedTC
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SARASA_INPUT: ${{ inputs.sarasa_tag }}
+      NERD_INPUT: ${{ inputs.nerd_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            nerd
+            LICENSE
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve versions
+        run: |
+          sarasa="${SARASA_INPUT:-$(gh api repos/be5invis/Sarasa-Gothic/releases/latest --jq .tag_name)}"
+          nerd="${NERD_INPUT:-$(gh api repos/ryanoasis/nerd-fonts/releases/latest --jq .tag_name)}"
+          {
+            echo "SARASA_TAG=$sarasa"
+            echo "SARASA_VERSION=${sarasa#v}"
+            echo "NERD_TAG=$nerd"
+            echo "RELEASE_TAG=$sarasa-nf${nerd#v}"
+          } >> "$GITHUB_ENV"
+
+      - name: Download inputs
+        run: |
+          mkdir -p src patcher ff
+          gh release download "$SARASA_TAG" -R be5invis/Sarasa-Gothic -p "$FAMILY-TTF-$SARASA_VERSION.7z" -D src
+          gh release download "$NERD_TAG" -R ryanoasis/nerd-fonts -p FontPatcher.zip -D patcher
+          gh release download "$FONTFORGE_TAG" -R fontforge/fontforge -p "$FONTFORGE_APPIMAGE" -D ff
+          (cd src && 7z x -y -bd ./*.7z > /dev/null && rm ./*.7z)
+          (cd patcher && unzip -q FontPatcher.zip)
+          chmod +x "ff/$FONTFORGE_APPIMAGE"
+          (cd ff && "./$FONTFORGE_APPIMAGE" --appimage-extract > /dev/null)
+
+      - name: Patch fonts
+        run: |
+          mkdir -p out logs
+          patch_one() {
+            name="$(basename "$1" .ttf)"
+            "$PWD/ff/squashfs-root/AppRun" -script "$PWD/patcher/font-patcher" \
+              --complete --single-width-glyphs --quiet --no-progressbars \
+              -out "$PWD/out" "$PWD/$1" > "logs/$name.log" 2>&1 \
+              || { echo "::error::$name failed"; tail -n 20 "logs/$name.log"; return 1; }
+          }
+          export -f patch_one
+          find src -name '*.ttf' -print0 | xargs -0 -P "$(nproc)" -I{} bash -c 'patch_one "$1"' _ {}
+
+      - name: Verify fonts
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet fonttools==4.60.1
+          .venv/bin/python nerd/verify.py src out "$FAMILY-" "${FAMILY}NerdFontMono-"
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp LICENSE out/LICENSE-Sarasa-Gothic.txt
+          gh api "repos/ryanoasis/nerd-fonts/contents/LICENSE?ref=$NERD_TAG" --jq .content \
+            | base64 -d > out/LICENSE-Nerd-Fonts.txt
+          (cd out && zip -q -9 "../dist/$FAMILY-NerdFontMono-$RELEASE_TAG.zip" ./*)
+          (cd dist && sha256sum ./*.zip > SHA256SUMS.txt)
+          ls -l dist out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fonts-${{ env.RELEASE_TAG }}
+          path: dist
+          retention-days: 7
+
+      - name: Publish release
+        run: |
+          {
+            echo "Sarasa Fixed TC $SARASA_TAG patched with Nerd Fonts $NERD_TAG (complete icon set, single-width icons)."
+            echo
+            echo "Family name: \`SarasaFixedTC Nerd Font Mono\`"
+          } > notes.md
+          gh release create "$RELEASE_TAG" dist/* --target "$GITHUB_SHA" \
+            --title "$RELEASE_TAG" --notes-file notes.md
