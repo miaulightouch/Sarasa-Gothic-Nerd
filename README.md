@@ -1,3 +1,13 @@
+> [!NOTE]
+> **This fork builds Sarasa Fixed TC with the full [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts) icon set.**
+> Download it from [Releases](../../releases). The family name is `SarasaFixedTC Nerd Font Mono`.
+>
+> - Chinese stays exactly twice the Latin width, and icons are single-width.
+> - It uses Sarasa Fixed because Sarasa Mono's ligatures take it past the 65,535 glyph limit once all icons are added.
+> - To build another version, run the **Build Nerd Fonts** workflow. It defaults to the latest upstream releases.
+>
+> The fonts stay under the [SIL Open Font License](LICENSE). The rest of this page is the upstream README.
+
 # Sarasa Gothic (更纱黑体 / 更紗黑體 / 更紗ゴシック / 사라사고딕)
 
 This is SARASA GOTHIC, a CJK composite font based on Inter, Iosevka and Source Han Sans.
